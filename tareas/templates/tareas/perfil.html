@@ -1,0 +1,100 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Perfil de Usuario</title>
+    <!-- Tailwind CSS para el diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-slate-100 min-h-screen text-slate-800">
+
+    <div class="max-w-md mx-auto py-12 px-4">
+      <div class="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+
+        <!-- Cabecera y Navegación -->
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-bold text-slate-700">Mi Perfil</h2>
+          <a href="{% url 'pantalla_tareas' %}" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">← Volver a Tareas</a>
+        </div>
+
+        <!-- Contenedor de Datos del Usuario -->
+        <div id="info-usuario" class="space-y-4">
+          <p class="text-slate-400 italic">Cargando datos del usuario...</p>
+        </div>
+
+        <!-- Botón Cerrar Sesión -->
+        <div class="mt-8 pt-4 border-t border-slate-100 flex justify-end">
+          <button onclick="cerrarSesion()" class="bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition duration-200 text-sm">
+            Cerrar Sesión
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <script src="{% static 'tareas/js/api.js' %}"></script>
+    <script>
+      // Crea un campo del perfil sin usar innerHTML con datos del servidor.
+      function crearCampo(etiqueta, valor, esRol = false) {
+        const contenedor = document.createElement("div");
+
+        const titulo = document.createElement("span");
+        titulo.className =
+          "text-xs text-slate-400 block uppercase font-semibold";
+        titulo.textContent = etiqueta;
+
+        const dato = document.createElement("span");
+        dato.className = esRol
+          ? "inline-block mt-1 px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-md text-xs font-bold uppercase"
+          : "font-medium text-slate-700";
+        dato.textContent = valor;
+
+        contenedor.append(titulo, dato);
+        return contenedor;
+      }
+
+      // Consultar los datos del usuario autenticado (GET /api/perfil/)
+      async function cargarPerfil() {
+        try {
+          const response = await api.apiFetch("/api/perfil/");
+          if (!response.ok) return;
+
+          const user = await response.json();
+          const contenedor = document.getElementById("info-usuario");
+          contenedor.replaceChildren();
+
+          const tarjeta = document.createElement("div");
+          tarjeta.className =
+            "bg-slate-50 p-4 rounded-lg border border-slate-100 space-y-3";
+
+          const fecha = user.date_joined
+            ? new Date(user.date_joined).toLocaleDateString()
+            : "No disponible";
+
+          tarjeta.append(
+            crearCampo("ID de Usuario", String(user.id)),
+            crearCampo("Nombre de Usuario", user.username),
+            crearCampo("Correo Electrónico", user.email || "No especificado"),
+            crearCampo("Rol Asignado", user.rol, true),
+            crearCampo("Fecha de Registro", fecha),
+          );
+
+          contenedor.appendChild(tarjeta);
+        } catch (error) {
+          console.error("Error al cargar perfil:", error);
+        }
+      }
+
+      // Cerrar sesión invalidando el refresh token en el servidor.
+      async function cerrarSesion() {
+        await api.logout();
+      }
+
+      if (api.requireAuth()) {
+        cargarPerfil();
+      }
+    </script>
+  </body>
+</html>
