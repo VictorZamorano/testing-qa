@@ -1,62 +1,85 @@
+"""Punto de entrada de la batería Selenium del CU-01.
 
-from datetime import datetime
+Ejecución completa:   python -m selenium_tests.test_selenium
+Caso individual:      python -m selenium_tests.test_selenium CP-02
+Varios casos:         python -m selenium_tests.test_selenium CP-12 CP-24
+"""
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+import sys
 
-from selenium_tests.configuracion import URL_REGISTRO, crear_navegador
+from selenium_tests import casos_prueba, configuracion, datos_prueba, funciones
 
-navegador = crear_navegador()
 
-try:
-    # 1. Abrir el formulario
-    navegador.get(URL_REGISTRO)
+def _ids_solicitados(argumentos, casos):
+    """Valida los identificadores de caso indicados en la línea de comandos."""
+    ids_validos = {caso["id"] for caso in casos}
+    if not argumentos or argumentos[0].upper() == "TODOS":
+        return [caso["id"] for caso in casos]
 
-    # 2. Localizar los campos
-    nombre = navegador.find_element(By.ID, "username")
-    correo = navegador.find_element(By.ID, "email")
-    password = navegador.find_element(By.ID, "password")
+    ids = []
+    for argumento in argumentos:
+        id_caso = argumento.upper()
+        if id_caso not in ids_validos:
+            raise ValueError(
+                f"Caso desconocido: {argumento}. Use CP-01 ... CP-27 o TODOS."
+            )
+        if id_caso not in ids:
+            ids.append(id_caso)
+    return ids
 
-    # 3. Introducir los datos de prueba
-    nombre.send_keys("José Pérez")
 
-    # Correo diferente en cada ejecución para evitar duplicados
-    correo_prueba = f"selenium_{datetime.now().strftime('%Y%m%d%H%M%S')}@test.com"
-    correo.send_keys(correo_prueba)
+def main(argv=None):
+    """Ejecuta los casos seleccionados y devuelve un código de salida."""
+    argv = sys.argv[1:] if argv is None else argv
+    funciones.configurar_django()
+    casos = datos_prueba.construir_casos()
 
-    password.send_keys("Test12345")
+    try:
+        ids = _ids_solicitados(argv, casos)
+    except ValueError as error:
+        print(error)
+        return 2
 
-    # 4. Enviar el formulario
-    navegador.find_element(
-        By.CSS_SELECTOR, "button[type='submit']"
-    ).click()
+    seleccionados = [caso for caso in casos if caso["id"] in ids]
+    if any(
+        caso["correo"] == datos_prueba.CORREO_PREVIO for caso in seleccionados
+    ) and funciones.obtener_usuario(datos_prueba.CORREO_PREVIO) is None:
+        print(
+            "AVISO: CP-12/CP-24 necesitan la cuenta previa. Ejecute primero:\n"
+            "  python -m selenium_tests.preparar_base"
+        )
 
-    # 5. Esperar a que aparezca el mensaje de éxito
-    mensaje_exito = WebDriverWait(navegador, 10).until(
-        EC.visibility_of_element_located((By.ID, "success-message"))
-    )
+    sufijo = datos_prueba.generar_sufijo()
+    print(f"Ejecución {sufijo}")
+    print(f"Formulario: {configuracion.URL_REGISTRO}")
+    print(f"Casos seleccionados: {len(seleccionados)}")
 
-    # 6. Comprobar el resultado
-    mensaje_error = navegador.find_element(By.ID, "error-message")
+    try:
+        navegador = configuracion.crear_navegador()
+    except Exception as error:
+        print(f"No se pudo iniciar Chrome: {type(error).__name__}: {error}")
+        return 2
 
-    assert mensaje_exito.is_displayed(), "No apareció el mensaje de éxito."
-    assert not mensaje_error.is_displayed(), "Se mostró un mensaje de error."
+    resultados = []
+    try:
+        for caso in seleccionados:
+            try:
+                resultado = casos_prueba.ejecutar_caso(navegador, caso, sufijo)
+            except Exception as error:
+                resultado = casos_prueba.resultado_error(caso, error, sufijo)
+            casos_prueba.mostrar_resultado(resultado)
+            resultados.append(resultado)
+    finally:
+        navegador.quit()
 
-    print("\n========================================")
-    print("CP-02: REGISTRO VÁLIDO")
-    print("========================================")
+    casos_prueba.mostrar_resumen(resultados)
+    ruta = casos_prueba.guardar_informe(resultados, sufijo)
+    print(f"Informe guardado en: {ruta}")
 
-    print("Datos ingresados:")
-    print("Nombre:", "José Pérez")
-    print("Correo:", correo_prueba)
-    print("Contraseña:", "********")
+    if any(r["estado"] != "APROBADO" for r in resultados):
+        return 1
+    return 0
 
-    print("\nResultado esperado: Registro exitoso.")
-    print("Resultado obtenido:", mensaje_exito.text)
-    print("Estado: APROBADO")
 
-    print("========================================")
-
-finally:
-    navegador.quit()
+if __name__ == "__main__":
+    raise SystemExit(main())

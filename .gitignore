@@ -1,4 +1,6 @@
 venv/
 __pycache__/
 *.pyc
+selenium_tests/resultados/
+selenium_tests/.cuenta_previa_generada.txt
 # db.sqlite3
